@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PyTerminal Web Interface</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+        }
+        .terminal {
+            background-color: #000000;
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 20px;
+            min-height: 400px;
+            overflow-y: auto;
+        }
+        .output {
+            white-space: pre-wrap;
+            margin-bottom: 10px;
+        }
+        .input-container {
+            display: flex;
+            align-items: center;
+        }
+        .prompt {
+            color: #00ff00;
+            margin-right: 10px;
+        }
+        .command-input {
+            background: transparent;
+            border: none;
+            color: #ffffff;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            outline: none;
+            flex: 1;
+        }
+        .error {
+            color: #ff4444;
+        }
+        .success {
+            color: #44ff44;
+        }
+        .help {
+            color: #4444ff;
+        }
+    </style>
+</script>
+</head>
+<body>
+    <h1>PyTerminal Web Interface</h1>
+    <div class="terminal" id="terminal">
+        <div class="output">Welcome to PyTerminal Web Interface!</div>
+        <div class="output">Type 'help' for available commands or 'exit' to quit</div>
+        <div class="output">----------------------------------------</div>
+    </div>
+    
+    <div class="input-container">
+        <span class="prompt" id="prompt">user@pyterminal:~$</span>
+        <input type="text" class="command-input" id="commandInput" autofocus>
+    </div>
+
+    <script>
+        const terminal = document.getElementById('terminal');
+        const commandInput = document.getElementById('commandInput');
+        const prompt = document.getElementById('prompt');
+        
+        let commandHistory = [];
+        let historyIndex = -1;
+        
+        // Load initial status
+        loadStatus();
+        
+        function loadStatus() {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    prompt.textContent = data.prompt;
+                });
+        }
+        
+        function addOutput(text, className = '') {
+            const output = document.createElement('div');
+            output.className = `output ${className}`;
+            output.textContent = text;
+            terminal.appendChild(output);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+        
+        function executeCommand(command) {
+            if (!command.trim()) return;
+            
+            // Add to history
+            commandHistory.unshift(command);
+            if (commandHistory.length > 100) {
+                commandHistory.pop();
+            }
+            historyIndex = -1;
+            
+            // Show command
+            addOutput(`$ ${command}`);
+            
+            // Execute command
+            fetch('/execute', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({command: command})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.output) {
+                    const className = data.success ? 'success' : 'error';
+                    addOutput(data.output, className);
+                }
+                
+                // Update prompt
+                loadStatus();
+            })
+            .catch(error => {
+                addOutput(`Error: ${error.message}`, 'error');
+            });
+        }
+        
+        commandInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                const command = commandInput.value.trim();
+                if (command) {
+                    executeCommand(command);
+                    commandInput.value = '';
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    commandInput.value = commandHistory[historyIndex];
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    commandInput.value = commandHistory[historyIndex];
+                } else if (historyIndex === 0) {
+                    historyIndex = -1;
+                    commandInput.value = '';
+                }
+            }
+        });
+        
+        // Auto-focus input
+        commandInput.focus();
+    </script>
+</body>
+</html>
